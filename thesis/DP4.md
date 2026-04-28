@@ -1,4 +1,4 @@
-# 技術文獻回顧：Diffusion Policy 4 (DP4)
+# Diffusion Policy 4 (DP4)
 
 ## 論文概覽
 * **全名**：Diffusion Policy 4: Scaling Visuomotor Learning via Latent Diffusion
