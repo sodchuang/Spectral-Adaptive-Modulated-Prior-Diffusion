@@ -1,4 +1,4 @@
-# 技術文獻回顧：Action-to-Action (A2A)
+# Action-to-Action (A2A)
 
 ## 論文概覽
 * **全名**：Action-to-Action Flow Matching: Informed Initialization for High-Frequency Robot Control
