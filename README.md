@@ -3,7 +3,7 @@
 本專案實作了一套結合 **A2A (Action-to-Action)** 效率、**FreqPolicy** 物理連貫性，以及 **Modulated Prior** 數學框架的機器人控制策略。透過將動作空間轉移至頻域 (Frequency Domain)，我們實現了具備「肌肉記憶」且能即時反應的工業級控制。
 
 ---
-##流程圖 (teaser figure)
+## 流程圖 (teaser figure)
 
 ![Flow](flow.png)
 ## 核心創新：頻譜差異化調變 (Spectral-Selective Modulation)
