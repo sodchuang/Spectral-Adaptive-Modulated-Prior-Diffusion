@@ -1,0 +1,155 @@
+# SAMP_Diff_v1 — PushT lowdim config
+# Based on Freqpolicy pusht.yaml; DiffLoss replaced by Flow Matching + A2A warm-start.
+
+_target_: diffusion_policy.workspace.train_samp_lowdim_workspace.TrainSampLowdimWorkspace
+
+action_dim: 2
+obs_dim: 20
+horizon: 16
+n_obs_steps: 2
+n_action_steps: 8
+n_latency_steps: 0
+obs_as_global_cond: true
+obs_as_local_cond: false
+pred_action_steps_only: false
+oa_step_convention: true
+
+checkpoint:
+  save_last_ckpt: true
+  save_last_snapshot: false
+  topk:
+    format_str: epoch={epoch:04d}-test_mean_score={test_mean_score:.3f}.ckpt
+    k: 5
+    mode: max
+    monitor_key: test_mean_score
+
+dataloader:
+  batch_size: 256
+  num_workers: 1
+  persistent_workers: false
+  pin_memory: true
+  shuffle: true
+
+val_dataloader:
+  batch_size: 256
+  num_workers: 1
+  persistent_workers: false
+  pin_memory: true
+  shuffle: false
+
+ema:
+  _target_: diffusion_policy.model.diffusion.ema_model.EMAModel
+  inv_gamma: 1.0
+  max_value: 0.9999
+  min_value: 0.0
+  power: 0.75
+  update_after_step: 0
+
+exp_name: default
+
+logging:
+  group: null
+  id: null
+  mode: offline
+  project: samp_diff_v1
+  entity: null
+  name: train_samp_lowdim_pusht
+  resume: true
+  tags:
+    - samp_lowdim
+    - pusht_lowdim
+
+multi_run:
+  run_dir: data/outputs/samp_lowdim_pusht
+  wandb_name_base: samp_lowdim_pusht
+
+optimizer:
+  _target_: torch.optim.AdamW
+  betas:
+    - 0.95
+    - 0.999
+  eps: 1.0e-08
+  lr: 0.0001
+  weight_decay: 1.0e-06
+
+training:
+  device: cuda:0
+  seed: 42
+  debug: false
+  resume: true
+  lr_scheduler: cosine
+  lr_warmup_steps: 500
+  num_epochs: 3050
+  gradient_accumulate_every: 1
+  use_ema: true
+  rollout_every: 50
+  checkpoint_every: 50
+  val_every: 1
+  sample_every: 5
+  max_train_steps: null
+  max_val_steps: null
+  tqdm_interval_sec: 1.0
+
+policy:
+  _target_: diffusion_policy.policy.samp_lowdim_policy.SampLowdimPolicy
+
+  # ---- Dimensions ----
+  horizon: ${horizon}
+  obs_dim: ${obs_dim}
+  action_dim: ${action_dim}
+  n_action_steps: ${n_action_steps}
+  n_obs_steps: ${n_obs_steps}
+
+  # ---- Policy convention ----
+  obs_as_global_cond: ${obs_as_global_cond}
+  obs_as_local_cond: ${obs_as_local_cond}
+  pred_action_steps_only: ${pred_action_steps_only}
+  oa_step_convention: ${oa_step_convention}
+
+  # ---- SampNet Transformer ----
+  encoder_embed_dim: 512
+  decoder_embed_dim: 512
+  encoder_depth: 4
+  decoder_depth: 4
+  encoder_num_heads: 8
+  decoder_num_heads: 8
+  mask: true
+  num_iter: 4
+
+  # ---- Flow Matching ----
+  num_inference_steps: 6      # Euler ODE steps at inference
+  fm_sigma: 0.0               # ConditionalFlowMatcher sigma (0 = straight paths)
+
+  # ---- A2A warm-start ----
+  sigma: 0.1                  # noise level added to DCT(prev_action) for x_0
+
+task:
+  action_dim: ${action_dim}
+  dataset:
+    _target_: diffusion_policy.dataset.pusht_dataset.PushTLowdimDataset
+    horizon: ${horizon}
+    max_train_episodes: 90
+    pad_after: 7
+    pad_before: 1
+    seed: 42
+    val_ratio: 0.02
+    zarr_path: data/pusht/pusht_cchi_v7_replay.zarr
+
+  env_runner:
+    _target_: diffusion_policy.env_runner.pusht_lowdim_runner.PushTLowdimRunner
+    max_steps: 300
+    n_envs: null
+    n_obs_steps: ${n_obs_steps}
+    n_action_steps: ${n_action_steps}
+    n_latency_steps: ${n_latency_steps}
+    fps: 10
+    crf: 22
+    tqdm_interval_sec: 5.0
+    n_train: 6
+    n_train_vis: 2
+    train_start_seed: 0
+    n_test: 50
+    n_test_vis: 4
+    test_start_seed: 100000
+    past_action: false
+    output_dir: ${hydra:runtime.output_dir}

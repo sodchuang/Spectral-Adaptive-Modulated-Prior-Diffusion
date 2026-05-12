@@ -1,88 +1,159 @@
-# Spectral-Adaptive Modulated Prior Diffusion
+﻿# Spectral-Adaptive Modulated Prior Diffusion (SAMP-Diff)
 
-本專案實作了一套結合 **A2A (Action-to-Action)** 效率、**FreqPolicy** 物理連貫性，以及 **Modulated Prior** 數學框架的機器人控制策略。透過將動作空間轉移至頻域 (Frequency Domain)，我們實現了具備「肌肉記憶」且能即時反應的工業級控制。
-
----
-## 流程圖 (teaser figure)
-
-![Flow](flow.png)
-## 核心創新：頻譜差異化調變 (Spectral-Selective Modulation)
-
-本研究解決了傳統 A2A 在時域處理高頻噪音時導致的「過度平滑」問題。我們提出針對不同頻譜成分實施差異化策略：
-
-* **低頻成分 (Low-Freq)**：動作的骨架與慣性。套用 **A2A + Modulated Prior**，實現 1-Step 高速推論。
-* **高頻成分 (High-Freq)**：動作的修正與細節。維持 **Standard Diffusion Denoising**，保留機器人對動態環境的靈敏反應能力。
-
-$$x_T = [\mu_{low} + \sigma_{low} \odot \epsilon_{low}, \epsilon_{high}]$$
+結合 **A2A 知情初始化**、**頻域（DCT）動作生成** 與 **Flow Matching** 的機器人控制策略。
+將動作預測移至頻域，以 6 步 Euler ODE 取代標準 50 步去噪，實現 50Hz+ 即時控制。
 
 ---
 
-## 雙域任務分配 (Dual-Domain Task Allocation)
+## 文件索引
 
-為了極大化控制效率與物理流暢度，系統將任務精確地分配至時域與頻域處理：
-
-### 1. Time Domain (時域)：感官捕捉與物理執行
-時域負責與現實世界進行實時互動，作為系統的「感官輸入」與「肌肉執行」端：
-* **多模態感知 (Perception)**：同步獲取當前視覺影像、語言指令及機器人狀態 (Joint States)。
-* **歷史數據檢索**：讀取上一時刻的動作序列 $A_{t-1}$ 作為調變基礎。
-* **高頻閉環執行**：將生成的頻率係數還原為時間軸動作 $A_t$，透過 **RTDE (Real-Time Data Exchange)** 以 50Hz+ 的頻率傳送至 UR 機器人。
-
-### 2. Frequency Domain (頻域)：大腦決策與運動調變
-頻域負責核心的數學運算與軌跡優化，作為系統的「決策中樞」：
-* **特徵表徵 (Representation)**：利用 **DCT (離散餘弦變換)** 將動作轉化為頻率係數。
-* **差異化先驗生成**：利用 **Prior Network (秋賢學長技術)** 在頻譜空間進行先驗分佈 ($\mu, \sigma$) 的精準調變。
-* **高效採樣 (Denoising)**：由於頻域能量集中在低頻，模型能以極少步數 (1-3 步) 快速收斂。
-* **物理平滑濾波**：天然過濾掉可能導致機械磨損的高頻數值跳變。
+| 文件 | 說明 |
+| :--- | :--- |
+| [README.md](./README.md) | 安裝、訓練、評估（本頁） |
+| [PLAN.md](./PLAN.md) | 研究計畫、核心創新、實驗設計、架構圖、設計哲學 |
+| [thesis/A2A.md](./thesis/A2A.md) | A2A Flow Matching 深度技術分析 |
+| [thesis/DP4.md](./thesis/DP4.md) | Diffusion Policy 4 深度技術分析 |
 
 ---
 
-## 技術基準對比 (Literature Review & Comparison)
+## 環境安裝
 
-本研究針對目前具身智能領域之兩大核心技術進行深入分析與對標。詳細的文獻探討與技術細節請參閱以下專題文件：
+```bash
+cd SAMP_Diff_v1
+conda env create -f conda_environment.yaml
+conda activate robodiff
+pip install -e .
+pip install torchcfm torch-dct
+```
 
-* [**Action-to-Action (A2A) Flow Matching**](./thesis/A2A.md)：探討知情初始化之效率優勢與時域過度平滑之局限性。
-* [**Diffusion Policy 4 (DP4)**](./thesis/DP4.md)：分析潛在空間擴散之穩健性及其在工業級實時控制中之運算壓力。
-
----
-
-## 支援環境與資料集 (Supported Benchmarks)
-
-| 分類 | 名稱 | 測試重點 |
-| :--- | :--- | :--- |
-| **基礎驗證** | `PushT` | 2D 軌跡快速迭代 |
-| **模仿學習** | `Robomimic` | 標準動作生成基準 |
-| **工業大數據** | `Bridge V2` | 真實廚房多任務驗證 |
-| **高頻控制** | `DROID` | 視覺引導與靈敏度測試 |
-| **幾何精度** | `ManiSkill2` | 幾何精度與物理接觸細節 |
-| **多任務通用** | `Meta-World` | 跨任務 (50種) 調變穩定性 |
-| **靈巧手控制** | `Adroit` | 24 自由度高維度協調挑戰 |
-| **通用大模型** | `Open X (RT-X)` | 跨機器人基礎模型泛化 |
-| **數據增強** | `MimicGen` | 合成示範數據擴增實驗 |
-| **實體落地** | `UR_Real_Data` | 實驗室 UR 機器人 RTDE 部署 |
+> 需要 MuJoCo 授權並完成 [robomimic 資料集下載](https://robomimic.github.io/docs/datasets/robomimic_v0.1.html)。
 
 ---
 
-## 預測架構 (Prediction Architecture)
+## 資料集準備
 
-預測流程是一個從「感官」到「頻譜決策」再回到「物理執行」的完整閉環：
+### 一鍵下載（Linux，推薦）
 
-1.  **多模態編碼**：提取環境特徵 (Observation Embedding)。
-2.  **時頻轉換 (Spectral Mapping)**：執行 $DCT(A_{t-1})$ 轉移至頻域。
-3.  **頻譜差異化調變**：
-    * **低頻**：丟入調變網路產出 $\mu, \sigma$。
-    * **高頻**：賦予標準高斯雜訊。
-4.  **快速頻域去噪**：執行 1-3 步採樣生成目標係數 $C_t$。
-5.  **動作還原與執行**：執行 $IDCT(C_t)$ 還原為 $A_t$ 並發送至機器人。
+```bash
+cd SAMP_Diff_v1
+chmod +x scripts/download_all_datasets.sh
+
+# 標準資料集（Robomimic + PushT + MimicGen + ManiSkill2，約 5-10 GB）
+./scripts/download_all_datasets.sh
+
+# 加上大型資料集（選填）
+./scripts/download_all_datasets.sh --with-bridge   # Bridge V2  ~10 TB
+./scripts/download_all_datasets.sh --with-droid    # DROID      ~15 TB
+./scripts/download_all_datasets.sh --with-openx    # Open X 夾爪子集 ~5 TB
+./scripts/download_all_datasets.sh --all-large     # 以上全部
+```
+
+### Python 下載腳本（跨平台）
+
+```bash
+cd SAMP_Diff_v1
+
+python download_data.py                    # lift（預設）
+python download_data.py --task can         # 撿鋁罐放入桶
+python download_data.py --task square      # 螺帽套入螺柱
+python download_data.py --skip-download    # 已下載，只做格式轉換
+```
+
+腳本自動完成：下載 `low_dim.hdf5` → 轉換為絕對座標 `low_dim_abs.hdf5`
+
+### 支援資料集
+
+| 分類 | 名稱 | 夾爪相容 |
+| :--- | :--- | :---: |
+| 基礎驗證 | `PushT` | ✓ |
+| 模仿學習 | `Robomimic` lift / can / square / transport | ✓ |
+| 數據增強 | `MimicGen` lift_d0 / can_d0 / square_d0 | ✓ |
+| 工業大數據 | `Bridge V2` | ✓ |
+| 高頻控制 | `DROID` | ✓ |
+| 幾何精度 | `ManiSkill2` PickCube / StackCube / PegInsertion | ✓ |
+| 多任務通用 | `Meta-World`（不需下載，訓練時即時生成） | ✓ |
+| 通用大模型 | `Open X (RT-X)` 夾爪子集 | ✓ |
+| 實體落地 | `UR_Real_Data`（自行錄製）| ✓ |
+| 靈巧手 | `Adroit` | ✗ |
 
 ---
 
-## 設計哲學：為什麼要這樣做？ (Design Philosophy)
+## 訓練
 
-### 1. 解決「延遲」
-利用 **A2A** 知情初始化配合 **Modulated Prior**，將推論步數壓縮至 **1-3 步**，解決標準 Diffusion 運算過慢之痛點。
+```bash
+cd SAMP_Diff_v1
 
-### 2. 解決「抖動」
-在頻域生成動作等於是在底層進行物理級的「低通濾波」，從數學本質上確保產出軌跡的連貫性與絲滑度。
+# Robomimic 夾爪任務
+python train.py --config-name=lift_ph       # 夾取方塊（推薦入門）
+python train.py --config-name=can_ph        # 撿鋁罐
+python train.py --config-name=square_ph     # 螺帽套柱
+python train.py --config-name=transport_ph  # 雙臂搬運
 
-### 3. 解決「反應遲鈍」
-透過**頻譜差異化**策略，使低頻（大方向）靠記憶維持穩定，高頻（細微修正）由當前視覺感官引導去噪，讓機器人兼具肌肉記憶與靈敏反應。
+# MimicGen 合成示範（資料量更多）
+python train.py --config-name=mimicgen_lift_d0
+python train.py --config-name=mimicgen_can_d0
+python train.py --config-name=mimicgen_square_d0
+
+# 多資料集合併訓練
+python train.py --config-name=multi_gripper
+
+# 2D 基準
+python train.py --config-name=pusht
+
+# 覆蓋參數
+python train.py --config-name=lift_ph \
+    training.device=cuda:1 \
+    dataloader.batch_size=128 \
+    training.num_epochs=1000
+```
+
+訓練輸出：
+
+```
+data/outputs/samp_lowdim_lift_ph/
+├── checkpoints/
+│   ├── latest.ckpt
+│   └── epoch=xxxx-test_mean_score=x.xxx.ckpt
+├── logs.json.txt
+└── wandb/
+```
+
+---
+
+## 評估
+
+```bash
+cd SAMP_Diff_v1
+
+python eval.py \
+    --checkpoint data/outputs/samp_lowdim_lift_ph/checkpoints/latest.ckpt \
+    --output_dir data/eval_output/lift_ph \
+    --device cuda:0
+```
+
+評估輸出：
+
+```
+data/eval_output/lift_ph/
+├── eval_log.json      ← test/mean_score, train/mean_score
+└── media/             ← 錄影片段（.mp4）
+```
+
+部署呼叫週期：
+
+```python
+policy.reset()                            # 切換 episode 前清除 warm-start buffer
+while not done:
+    obs_dict = env.get_obs()
+    result   = policy.predict_action(obs_dict)
+    action   = result['action']           # shape: (1, 8, 10)
+    env.step(action[0])
+```
+
+---
+
+## 研究計畫與架構細節
+
+核心創新、訓練/推論流程圖、實驗設計、設計哲學、v1→v2 路線圖請見：
+
+**[→ PLAN.md](./PLAN.md)**
