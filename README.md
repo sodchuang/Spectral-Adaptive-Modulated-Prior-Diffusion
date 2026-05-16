@@ -241,55 +241,37 @@ flowchart LR
 
 ## 安裝
 
-**需求**：Linux、CUDA 11.6 驅動、conda（Miniconda / Anaconda）
+**需求**：Linux、CUDA 11.6 驅動、git、curl
 
 ```bash
 cd SAMP_Diff_v1
 
-# 1. 建立 conda 環境（Python 3.9 + PyTorch 1.12.1 + CUDA 11.6）
-conda env create -f conda_environment.yaml
-conda activate robodiff
+# 一鍵安裝（自動處理 Python 3.9、PyTorch、MuJoCo 依賴、lerobot）
+bash scripts/install.sh
 
-# 2. 安裝本地套件
-pip install -e .
-
-# 3. 安裝額外依賴（conda_environment.yaml 未包含）
-pip install torchcfm torch-dct lerobot
-
-# 4. 安裝 LeRobot gym 模擬環境（依需求選擇）
-pip install gym-pusht          # PushT
-pip install gym-aloha           # ALOHA 雙臂
+# 啟用環境
+source .venv/bin/activate
 ```
 
-> conda 環境名稱為 `robodiff`（定義於 `conda_environment.yaml`）。
-> 無 conda 環境時，可改用 `bash scripts/install.sh`（建立 `.venv`）。
+`install.sh` 自動完成：
+
+| 步驟 | 內容 |
+| :--- | :--- |
+| 1 | `apt` 裝系統套件（`libosmesa6-dev libglfw3 patchelf` 等 MuJoCo / OpenGL 依賴） |
+| 2 | 偵測或編譯 Python 3.9，建立 `.venv` |
+| 3 | PyTorch 1.12.1 + CUDA 11.6 |
+| 4 | `requirements.txt` |
+| 5 | `pip install -e .` |
+| 6 | `pip install torchcfm torch-dct lerobot` |
+| 7 | `pip install gym-pusht gym-aloha gym-xarm` |
+
+> conda 用戶可改用：`conda env create -f conda_environment.yaml && conda activate robodiff`，再補裝 `pip install -e . torchcfm torch-dct lerobot gym-pusht gym-aloha`。
 
 ---
 
 ## 資料集準備
 
-### LeRobot（自動下載，無需手動操作）
-
-```bash
-# 首次執行 train.py 時自動從 HuggingFace Hub 下載
-# 若要預先快取，手動執行：
-python -c "from lerobot.common.datasets.lerobot_dataset import LeRobotDataset; LeRobotDataset('lerobot/pusht')"
-python -c "from lerobot.common.datasets.lerobot_dataset import LeRobotDataset; LeRobotDataset('lerobot/aloha_sim_transfer_cube_human')"
-```
-
-### Robomimic（MuJoCo，需手動下載）
-
-```bash
-# 下載原始資料集
-python download_data.py --task lift     # 夾取方塊（推薦）
-python download_data.py --task can      # 撿鋁罐
-python download_data.py --task square   # 螺帽套柱
-
-# 僅做格式轉換（已有 hdf5 時）
-python download_data.py --task lift --skip-download
-```
-
-輸出路徑：`SAMP_Diff_v1/data/robomimic/datasets/<task>/ph/low_dim_abs.hdf5`
+**無需任何操作**，直接執行訓練指令，首次啟動時自動從 HuggingFace Hub 下載並快取到 `~/.cache/huggingface/`。
 
 ---
 
@@ -297,23 +279,16 @@ python download_data.py --task lift --skip-download
 
 ```bash
 cd SAMP_Diff_v1
-conda activate robodiff
+source .venv/bin/activate
 
-# ── LeRobot ──────────────────────────────────────────────────────────
 python train.py --config-name=lerobot_pusht
 python train.py --config-name=lerobot_aloha
 
 # 換 ALOHA 子任務：覆蓋 repo_id 即可，不需改 yaml
 python train.py --config-name=lerobot_aloha task.repo_id=lerobot/aloha_sim_insertion_human
 
-# ── Robomimic / MuJoCo ───────────────────────────────────────────────
-python train.py --config-name=lift_ph
-python train.py --config-name=can_ph
-python train.py --config-name=square_ph
-
-# ── 常用覆蓋參數（Hydra 語法，空格分隔）─────────────────────────────
+# 常用覆蓋參數（Hydra 語法，空格分隔）
 python train.py --config-name=lerobot_pusht training.device=cuda:1 dataloader.batch_size=128
-python train.py --config-name=lift_ph training.num_epochs=1000 training.debug=true
 ```
 
 訓練輸出：
@@ -335,18 +310,17 @@ data/outputs/<run_name>/
 `eval.py` 參數：`-c` / `--checkpoint`（必填）、`-o` / `--output_dir`（必填）、`-d` / `--device`（預設 `cuda:0`）
 
 ```bash
-conda activate robodiff
-
-# Robomimic / MuJoCo
-python eval.py \
-    -c data/outputs/samp_lowdim_lift_ph/checkpoints/latest.ckpt \
-    -o data/eval_output/lift_ph \
-    -d cuda:0
+source .venv/bin/activate
 
 # LeRobot PushT
 python eval.py \
     -c data/outputs/samp_lowdim_lerobot_pusht/checkpoints/latest.ckpt \
     -o data/eval_output/lerobot_pusht
+
+# LeRobot ALOHA
+python eval.py \
+    -c data/outputs/samp_lowdim_lerobot_aloha/checkpoints/latest.ckpt \
+    -o data/eval_output/lerobot_aloha
 
 # CPU 執行（無 GPU）
 python eval.py \
@@ -374,7 +348,7 @@ while not done:
 
 | 版本 | 重點 | 狀態 |
 | :--- | :--- | :--- |
-| **v1**（本版） | DCT + FM + A2A warm-start，全頻統一先驗，LeRobot + Robomimic | ✅ 進行中 |
+| **v1**（本版） | DCT + FM + A2A warm-start，全頻統一先驗，LeRobot | ✅ 進行中 |
 | **v2** | 高低頻分離先驗（Exp-1 方案 B/C） | 🔲 計畫中 |
 | **v3** | 視覺輸入（ResNet18 encoder），Image Policy | 🔲 計畫中 |
 
